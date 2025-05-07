@@ -28,6 +28,7 @@
  import org.apache.iceberg.io.InputFile;
  import java.io.InputStream;
  import java.util.HashMap;
+ import org.apache.iceberg.gcp.GCPProperties;
  import org.openjdk.jmh.annotations.Benchmark;
  import org.openjdk.jmh.annotations.BenchmarkMode;
  import org.openjdk.jmh.annotations.Fork;
@@ -62,7 +63,7 @@
  
      private GCSFileIO gcsFileIO;
      private String testFilePathSmall; // gs://your-bucket/path/to/small-file.parquet
-     private String testFilePathLarge; // gs://your-bucket/path/to/large-file.parquet
+     // private String testFilePathLarge; // gs://your-bucket/path/to/large-file.parquet
      private byte[] buffer;
  
      @Setup
@@ -70,20 +71,21 @@
          gcsFileIO = new GCSFileIO();
          Map<String, String> properties = new HashMap<>();
          // Configure GCPProperties:
-         // properties.put(GCPProperties.GCS_PROJECT_ID, "your-project-id");
+         properties.put(GCPProperties.GCS_PROJECT_ID, "shubham-prelaunch-testing");
          // properties.put(GCPProperties.GCS_SERVICE_ACCOUNT_KEY_FILE, "/path/to/your/key.json");
          // Or ensure Application Default Credentials are set up in the environment.
          gcsFileIO.initialize(properties);
  
          // Define paths to pre-existing test files in your GCS bucket
-         testFilePathSmall = "gs://your-benchmark-bucket/test-data/small-file.parquet";
-         testFilePathLarge = "gs://your-benchmark-bucket/test-data/large-file.parquet";
+         testFilePathSmall = "gs://iceberg-testing/output.parquet";
+         // testFilePathLarge = "gs://your-benchmark-bucket/test-data/large-file.parquet";
  
          // Create dummy files in GCS if they don't exist or ensure they are present
          // For a real benchmark, you'd upload actual Parquet/Avro/ORC files.
          // For simplicity here, this step is assumed to be done externally.
  
          buffer = new byte[8192]; // 8KB buffer for reading
+         System.out.println("Buffer size: " + buffer.length);
      }
  
      @TearDown()
@@ -94,18 +96,9 @@
      }
  
      @Benchmark
-     public InputFile newInputFileSmall() {
-         return gcsFileIO.newInputFile(testFilePathSmall);
-     }
- 
-     @Benchmark
-     public InputFile newInputFileLarge() {
-         return gcsFileIO.newInputFile(testFilePathLarge);
-     }
- 
-     @Benchmark
      public long readSmallFile() throws IOException {
          InputFile inputFile = gcsFileIO.newInputFile(testFilePathSmall);
+         //System.out.println("inputfile"+ inputFile)
          long totalBytesRead = 0;
          try (InputStream stream = inputFile.newStream()) {
              int bytesRead;
@@ -113,19 +106,7 @@
                  totalBytesRead += bytesRead;
              }
          }
-         return totalBytesRead;
-     }
- 
-     @Benchmark
-     public long readLargeFile() throws IOException {
-         InputFile inputFile = gcsFileIO.newInputFile(testFilePathLarge);
-         long totalBytesRead = 0;
-         try (InputStream stream = inputFile.newStream()) {
-             int bytesRead;
-             while ((bytesRead = stream.read(buffer)) != -1) {
-                 totalBytesRead += bytesRead;
-             }
-         }
+         //System.out.println("totalbytesread"+totalBytesRead);
          return totalBytesRead;
      }
  }
