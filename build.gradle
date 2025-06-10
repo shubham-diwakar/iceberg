@@ -514,6 +514,11 @@ project(':iceberg-aws') {
       compileClasspath += main.output + test.output
       runtimeClasspath += main.output + test.output
     }
+    jmh {
+        java {
+            srcDirs = ['src/jmh/java']
+        }
+    }
   }
 
   configurations {
