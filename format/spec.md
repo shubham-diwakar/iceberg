@@ -24,9 +24,9 @@ This is a specification for the Iceberg table format that is designed to manage 
 
 ## Format Versioning
 
-Versions 1 and 2 of the Iceberg spec are complete and adopted by the community.
+Versions 1, 2 and 3 of the Iceberg spec are complete and adopted by the community.
 
-**Version 3 is under active development and has not been formally adopted.**
+**Version 4 is under active development and has not been formally adopted.**
 
 The format version number is incremented when new features are added that will break forward-compatibility---that is, when older readers would not read newer table features correctly. Tables may continue to be written with an older version of the spec to ensure compatibility by not using features that are not yet implemented by processing engines.
 
@@ -55,6 +55,7 @@ Version 3 of the Iceberg spec extends data types and existing metadata structure
 * Binary deletion vectors
 * Table encryption keys
 
+The full set of changes are listed in [Appendix E](#version-3).
 
 ## Goals
 
@@ -682,6 +683,8 @@ Examples of valid field paths using normalized JSON path format are:
 
 For `geometry` and `geography` types, `lower_bounds` and `upper_bounds` are both points of the following coordinates X, Y, Z, and M (see [Appendix G](#appendix-g-geospatial-notes)) which are the lower / upper bound of all objects in the file. For the X values only, xmin may be greater than xmax, in which case an object in this bounding box may match if it contains an X such that `x >= xmin` OR`x <= xmax`. In geographic terminology, the concepts of `xmin`, `xmax`, `ymin`, and `ymax` are also known as `westernmost`, `easternmost`, `southernmost` and `northernmost`, respectively. For `geography` types, these points are further restricted to the canonical ranges of [-180 180] for X and [-90 90] for Y.
 
+When calculating upper and lower bounds for `geometry` and `geography`, null or NaN values in a coordinate dimension are skipped; for example, POINT (1 NaN) contributes a value to X but no values to Y, Z, or M dimension bounds. If a dimension has only null or NaN values, that dimension is omitted from the bounding box. If either the X or Y dimension is missing then the bounding box itself is not produced.
+
 The `partition` struct stores the tuple of partition values for each file. Its type is derived from the partition fields of the partition spec used to write the manifest file. In v2, the partition struct's field ids must match the ids from the partition spec.
 
 The column metrics maps are used when filtering to select both data and delete files. For delete files, the metrics must store bounds and counts for all deleted rows, or must be omitted. Storing metrics for deleted rows ensures that the values can be used during job planning to find delete files that must be merged during a scan.
@@ -1107,10 +1110,11 @@ This section details how to encode row-level deletes in Iceberg delete files. Ro
 There are three types of row-level deletes:
 
 * Deletion vectors (DVs) identify deleted rows within a single referenced data file by position in a bitmap
-* Position delete files identify deleted rows by file location and row position (**deprecated**)
+* Position delete files identify deleted rows by file location and row position (**deprecated** in v3)
 * Equality delete files identify deleted rows by the value of one or more columns
 
 Deletion vectors are a binary representation of deletes for a single data file that is more efficient at execution time than position delete files. Unlike equality or position delete files, there can be at most one deletion vector for a given data file in a snapshot. Writers must ensure that there is at most one deletion vector per data file and must merge new deletes with existing vectors or position delete files.
+When removing a data file, writers must also remove any deletion vector that applies to that data file from delete manifests. Writers are not required to rewrite Puffin files that contain the removed deletion vectors.
 
 Row-level delete files (both equality and position delete files) are valid Iceberg data files: files must use valid Iceberg formats, schemas, and column projection. It is recommended that these delete files are written using the table's default file format.
 
@@ -1531,6 +1535,8 @@ The following table describes the possible values for the some of the field with
 
 Table metadata is serialized as a JSON object according to the following table. Snapshots are not serialized separately. Instead, they are stored in the table metadata JSON.
 
+A metadata JSON file may be compressed with [GZIP](https://datatracker.ietf.org/doc/html/rfc1952).
+
 |Metadata field|JSON representation|Example|
 |--- |--- |--- |
 |**`format-version`**|`JSON int`|`1`|
@@ -1680,6 +1686,26 @@ Row-level delete changes:
     * These position delete files must be merged into the DV for a data file when one is created
     * Position delete files that contain deletes for more than one data file need to be kept in table metadata until all deletes are replaced by DVs
 
+Row lineage changes:
+
+* Writers must set the table's `next-row-id` and use the existing `next-row-id` as the `first-row-id` when creating new snapshots
+    * When a table is upgraded to v3, `next_row_id` should be initialized to 0
+    * When committing a new snapshot `next-row-id` must be incremented by at least the number of newly assigned row ids in the snapshot
+    * It is recommended to increment `next-row-id` by the total `added_rows_count` and `existing_rows_count` of all manifests assigned a `first_row_id`
+* Writers must assign a `first_row_id` to new data manifests when writing a manifest list
+    * When writing a new manifest list each `first_row_id` must be incremented by at least the number of newly assigned row ids in the manifest
+    * It is recommended to increment `first_row_id` by a manifest's `added_rows_count` and `existing_rows_count`
+* When writing a manifest, new data files must be written with a null `first_row_id` so that the value is assigned at read time based on the manifest's `first_row_id`
+* When a manifest has a non-null `first_row_id`, readers must assign a `first_row_id` to any data file that has a missing or null value in that manifest
+    * Readers must increment `first_row_id` by the data file's `record_count`
+* When writing an existing data file into a new manifest, its `first_row_id` must be written into the manifest
+* When a data file has a non-null `first_row_id`, readers must:
+    * Replace any null or missing `_row_id` with the data file's `first_row_id` plus the row's `_pos`
+    * Replace any null or missing `_last_updated_sequence_number` to the data file's `data_sequence_number`
+    * Read any non-null `_row_id` or `_last_updated_sequence_number` without modification
+* When a data file has a null `first_row_id`, readers must produce null for `_row_id` and `_last_updated_sequence_number`
+* When writing an existing row into a new data file, writers must write `_row_id` and `_last_updated_sequence_number` if they are non-null
+
 Encryption changes:
 
 * Encryption keys are tracked by table metadata `encryption-keys`
@@ -1818,6 +1844,10 @@ Writers should produce positive values for snapshot ids in a manner that minimiz
 The reference Java implementation uses a type 4 uuid and XORs the 4 most significant bytes with the 4 least significant bytes then ANDs with the maximum long value to arrive at a pseudo-random snapshot id with a low probability of collision.
 
 Java writes `-1` for "no current snapshot" with V1 and V2 tables and considers this equivalent to omitted or `null`. This has never been formalized in the spec, but for compatibility, other implementations can accept `-1` as `null`. Java will no longer write `-1` and will use `null` for "no current snapshot" for all tables with a version greater than or equal to V3.
+
+### Naming for GZIP compressed Metadata JSON files
+
+Some implementations require that GZIP compressed files have the suffix `.gz.metadata.json` to be read correctly. The Java reference implementation can additionally read GZIP compressed files with the suffix `metadata.json.gz`.  
 
 ## Appendix G: Geospatial Notes
 

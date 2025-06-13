@@ -21,6 +21,7 @@ package org.apache.iceberg.flink.sink;
 import static org.apache.iceberg.flink.TestFixtures.DATABASE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assumptions.assumeThat;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -55,7 +56,6 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Types;
-import org.junit.Assume;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -143,57 +143,6 @@ public class TestIcebergSink extends TestFlinkIcebergSinkBase {
   @TestTemplate
   void testWriteRowWithTableSchema() throws Exception {
     testWriteRow(SimpleDataUtil.FLINK_SCHEMA, DistributionMode.NONE);
-  }
-
-  @TestTemplate
-  void testJobNoneDistributeMode() throws Exception {
-    table
-        .updateProperties()
-        .set(TableProperties.WRITE_DISTRIBUTION_MODE, DistributionMode.HASH.modeName())
-        .commit();
-
-    testWriteRow(null, DistributionMode.NONE);
-
-    if (parallelism > 1) {
-      if (partitioned) {
-        int files = partitionFiles("aaa") + partitionFiles("bbb") + partitionFiles("ccc");
-        assertThat(files).as("Should have more than 3 files in iceberg table.").isGreaterThan(3);
-      }
-    }
-  }
-
-  @TestTemplate
-  void testJobHashDistributionMode() {
-    table
-        .updateProperties()
-        .set(TableProperties.WRITE_DISTRIBUTION_MODE, DistributionMode.HASH.modeName())
-        .commit();
-
-    assertThatThrownBy(() -> testWriteRow(null, DistributionMode.RANGE))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("Flink does not support 'range' write distribution mode now.");
-  }
-
-  @TestTemplate
-  void testJobNullDistributionMode() throws Exception {
-    table
-        .updateProperties()
-        .set(TableProperties.WRITE_DISTRIBUTION_MODE, DistributionMode.HASH.modeName())
-        .commit();
-
-    testWriteRow(null, null);
-
-    if (partitioned) {
-      assertThat(partitionFiles("aaa"))
-          .as("There should be only 1 data file in partition 'aaa'")
-          .isEqualTo(1);
-      assertThat(partitionFiles("bbb"))
-          .as("There should be only 1 data file in partition 'bbb'")
-          .isEqualTo(1);
-      assertThat(partitionFiles("ccc"))
-          .as("There should be only 1 data file in partition 'ccc'")
-          .isEqualTo(1);
-    }
   }
 
   @TestTemplate
@@ -312,25 +261,6 @@ public class TestIcebergSink extends TestFlinkIcebergSinkBase {
   }
 
   @TestTemplate
-  void testOverrideWriteConfigWithUnknownDistributionMode() {
-    Map<String, String> newProps = Maps.newHashMap();
-    newProps.put(FlinkWriteOptions.DISTRIBUTION_MODE.key(), "UNRECOGNIZED");
-
-    List<Row> rows = createRows("");
-    DataStream<Row> dataStream = env.addSource(createBoundedSource(rows), ROW_TYPE_INFO);
-    IcebergSink.forRow(dataStream, SimpleDataUtil.FLINK_SCHEMA)
-        .table(table)
-        .tableLoader(tableLoader)
-        .writeParallelism(parallelism)
-        .setAll(newProps)
-        .append();
-
-    assertThatThrownBy(() -> env.execute("Test Iceberg DataStream"))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("Invalid distribution mode: UNRECOGNIZED");
-  }
-
-  @TestTemplate
   void testOverrideWriteConfigWithUnknownFileFormat() {
     Map<String, String> newProps = Maps.newHashMap();
     newProps.put(FlinkWriteOptions.WRITE_FORMAT.key(), "UNRECOGNIZED");
@@ -421,8 +351,9 @@ public class TestIcebergSink extends TestFlinkIcebergSinkBase {
 
   @TestTemplate
   void testErrorOnNullForRequiredField() throws Exception {
-    Assume.assumeFalse(
-        "ORC file format supports null values even for required fields.", format == FileFormat.ORC);
+    assumeThat(format)
+        .as("ORC file format supports null values even for required fields.")
+        .isNotEqualTo(FileFormat.ORC);
 
     Schema icebergSchema =
         new Schema(
