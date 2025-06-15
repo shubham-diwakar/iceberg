@@ -87,8 +87,8 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
   }
 
   private ReadChannel openChannel() {
+    long start = System.nanoTime();
     List<BlobSourceOption> sourceOptions = Lists.newArrayList();
-
     gcpProperties
         .decryptionKey()
         .ifPresent(key -> sourceOptions.add(BlobSourceOption.decryptionKey(key)));
@@ -99,6 +99,9 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     ReadChannel result = storage.reader(blobId, sourceOptions.toArray(new BlobSourceOption[0]));
 
     gcpProperties.channelReadChunkSize().ifPresent(result::setChunkSize);
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.debug("Operation read channel took {} milliseconds.", duration / 1_000_000);
 
     return result;
   }
@@ -113,17 +116,22 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     Preconditions.checkState(!closed, "already closed");
     Preconditions.checkArgument(newPos >= 0, "position is negative: %s", newPos);
 
+    long start = System.nanoTime();
     pos = newPos;
     try {
       channel.seek(newPos);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.debug("Operation seek took {} milliseconds.", duration / 1_000_000);
   }
 
   @Override
   public int read() throws IOException {
     Preconditions.checkState(!closed, "Cannot read: already closed");
+    long start = System.nanoTime();
     singleByteBuffer.position(0);
 
     pos += 1;
@@ -131,22 +139,30 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     readBytes.increment();
     readOperations.increment();
 
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.debug("Operation read() took {} milliseconds.", duration / 1_000_000);
     return singleByteBuffer.array()[0] & 0xFF;
   }
 
   @Override
   public int read(byte[] b, int off, int len) throws IOException {
     Preconditions.checkState(!closed, "Cannot read: already closed");
+    long start = System.nanoTime();
     byteBuffer = byteBuffer != null && byteBuffer.array() == b ? byteBuffer : ByteBuffer.wrap(b);
     int bytesRead = read(channel, byteBuffer, off, len);
     pos += bytesRead;
     readBytes.increment(bytesRead);
     readOperations.increment();
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.debug("Operation read(_,_,_) took {} milliseconds.", duration / 1_000_000);
     return bytesRead;
   }
 
   @Override
   public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
+    long start = System.nanoTime();
     try (ReadChannel readChannel = openChannel()) {
       readChannel.seek(position);
       readChannel.limit(position + length);
@@ -156,17 +172,25 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
             "Reached the end of stream with " + (length - bytesRead) + " bytes left to read");
       }
     }
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.debug("Operation readFully took {} milliseconds.", duration / 1_000_000);
   }
 
   @Override
   public int readTail(byte[] buffer, int offset, int length) throws IOException {
+    long start = System.nanoTime();
     if (blobSize == null) {
       blobSize = storage.get(blobId).getSize();
     }
     long startPosition = Math.max(0, blobSize - length);
     try (ReadChannel readChannel = openChannel()) {
       readChannel.seek(startPosition);
-      return read(readChannel, ByteBuffer.wrap(buffer), offset, length);
+      int bytesRead = read(readChannel, ByteBuffer.wrap(buffer), offset, length);
+      long end = System.nanoTime();
+      long duration = end - start;
+      LOG.debug("Operation readTail took {} milliseconds.", duration / 1_000_000);
+      return bytesRead;
     }
   }
 
