@@ -93,7 +93,7 @@ class GCSOutputStream extends PositionOutputStream {
     writeOperations.increment();
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.debug("Operation write(_) took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation write(_) took {} milliseconds.", duration / 1_000_000);
   }
 
   @Override
@@ -105,7 +105,7 @@ class GCSOutputStream extends PositionOutputStream {
     writeOperations.increment();
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.debug("Operation write(_,_,_) took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation write(_,_,_) took {} milliseconds.", duration / 1_000_000);
   }
 
   private void openStream() {
@@ -128,7 +128,7 @@ class GCSOutputStream extends PositionOutputStream {
     stream = Channels.newOutputStream(channel);
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.debug("Operation openStream() took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation openStream() took {} milliseconds.", duration / 1_000_000);
   }
 
   @Override

@@ -101,7 +101,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     gcpProperties.channelReadChunkSize().ifPresent(result::setChunkSize);
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.debug("Operation read channel took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation read channel took {} milliseconds.", duration / 1_000_000);
 
     return result;
   }
@@ -125,7 +125,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     }
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.debug("Operation seek took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation seek took {} milliseconds.", duration / 1_000_000);
   }
 
   @Override
@@ -141,7 +141,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
 
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.debug("Operation read() took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation read() took {} milliseconds.", duration / 1_000_000);
     return singleByteBuffer.array()[0] & 0xFF;
   }
 
@@ -156,7 +156,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     readOperations.increment();
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.debug("Operation read(_,_,_) took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation read(_,_,_) took {} milliseconds.", duration / 1_000_000);
     return bytesRead;
   }
 
@@ -174,7 +174,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     }
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.debug("Operation readFully took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation readFully took {} milliseconds.", duration / 1_000_000);
   }
 
   @Override
@@ -189,7 +189,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
       int bytesRead = read(readChannel, ByteBuffer.wrap(buffer), offset, length);
       long end = System.nanoTime();
       long duration = end - start;
-      LOG.debug("Operation readTail took {} milliseconds.", duration / 1_000_000);
+      LOG.info("Operation readTail took {} milliseconds.", duration / 1_000_000);
       return bytesRead;
     }
   }
