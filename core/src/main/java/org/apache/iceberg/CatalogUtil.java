@@ -380,6 +380,9 @@ public class CatalogUtil {
       Object hadoopConf,
       List<StorageCredential> storageCredentials) {
     LOG.info("Loading custom FileIO implementation: {}", impl);
+    LOG.info("storageCredentials: {}", storageCredentials);
+    LOG.info("hadoopConf: {}", hadoopConf);
+    LOG.info("properties: {}", properties);
     DynConstructors.Ctor<FileIO> ctor;
     try {
       ctor =
