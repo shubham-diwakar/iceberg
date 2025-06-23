@@ -87,6 +87,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
   }
 
   private ReadChannel openChannel() {
+    long start = System.nanoTime();
     List<BlobSourceOption> sourceOptions = Lists.newArrayList();
 
     gcpProperties
@@ -99,6 +100,9 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     ReadChannel result = storage.reader(blobId, sourceOptions.toArray(new BlobSourceOption[0]));
 
     gcpProperties.channelReadChunkSize().ifPresent(result::setChunkSize);
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation read channel took {} milliseconds for {}.", duration / 1_000_000, blobId);
 
     return result;
   }
@@ -112,6 +116,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
   public void seek(long newPos) {
     Preconditions.checkState(!closed, "already closed");
     Preconditions.checkArgument(newPos >= 0, "position is negative: %s", newPos);
+    long start = System.nanoTime();
 
     pos = newPos;
     try {
@@ -119,35 +124,46 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation seek({}) took {} milliseconds for {}.",newPos, duration / 1_000_000, this.blobId);
   }
 
   @Override
   public int read() throws IOException {
     Preconditions.checkState(!closed, "Cannot read: already closed");
+    long start = System.nanoTime();
     singleByteBuffer.position(0);
 
     pos += 1;
     channel.read(singleByteBuffer);
     readBytes.increment();
     readOperations.increment();
-
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation read() took {} milliseconds for {}.", duration / 1_000_000, this.blobId);
     return singleByteBuffer.array()[0] & 0xFF;
   }
 
   @Override
   public int read(byte[] b, int off, int len) throws IOException {
     Preconditions.checkState(!closed, "Cannot read: already closed");
+    long start = System.nanoTime();
     byteBuffer = byteBuffer != null && byteBuffer.array() == b ? byteBuffer : ByteBuffer.wrap(b);
     int bytesRead = read(channel, byteBuffer, off, len);
     pos += bytesRead;
     readBytes.increment(bytesRead);
     readOperations.increment();
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation read(_,{},{}) took {} milliseconds for {}.",off,len, duration / 1_000_000, this.blobId);
     return bytesRead;
   }
 
   @Override
   public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
     try (ReadChannel readChannel = openChannel()) {
+      long start = System.nanoTime();
       readChannel.seek(position);
       readChannel.limit(position + length);
       int bytesRead = read(readChannel, ByteBuffer.wrap(buffer), offset, length);
@@ -155,18 +171,26 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
         throw new EOFException(
             "Reached the end of stream with " + (length - bytesRead) + " bytes left to read");
       }
+      long end = System.nanoTime();
+      long duration = end - start;
+      LOG.info("Operation readFully({},_,{},{}) took {} milliseconds for {}.",position,offset,length,duration / 1_000_000, this.blobId);
     }
   }
 
   @Override
   public int readTail(byte[] buffer, int offset, int length) throws IOException {
+    long start = System.nanoTime();
     if (blobSize == null) {
       blobSize = storage.get(blobId).getSize();
     }
     long startPosition = Math.max(0, blobSize - length);
     try (ReadChannel readChannel = openChannel()) {
       readChannel.seek(startPosition);
-      return read(readChannel, ByteBuffer.wrap(buffer), offset, length);
+      int bytesRead = read(readChannel, ByteBuffer.wrap(buffer), offset, length);
+      long end = System.nanoTime();
+      long duration = end - start;
+      LOG.info("Operation readTail(_,{},{}) took {} milliseconds for {}.",offset,length, duration / 1_000_000, this.blobId);
+      return bytesRead;
     }
   }
 

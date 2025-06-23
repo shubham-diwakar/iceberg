@@ -51,6 +51,8 @@ public class Util {
   private Util() {}
 
   public static FileSystem getFs(Path path, Configuration conf) {
+    LOG.info("Getting file system for path: {}", path);
+    LOG.info("Configuartion: {}", conf);
     try {
       return path.getFileSystem(conf);
     } catch (IOException e) {

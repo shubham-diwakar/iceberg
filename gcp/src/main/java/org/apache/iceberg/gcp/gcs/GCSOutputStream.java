@@ -86,21 +86,30 @@ class GCSOutputStream extends PositionOutputStream {
 
   @Override
   public void write(int b) throws IOException {
+    long start = System.nanoTime();
     stream.write(b);
     pos += 1;
     writeBytes.increment();
     writeOperations.increment();
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation write({}) took {} milliseconds for {}.",b, duration / 1_000_000, blobId);
   }
 
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
+    long start = System.nanoTime();
     stream.write(b, off, len);
     pos += len;
     writeBytes.increment(len);
     writeOperations.increment();
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation write(_,{},{}) took {} milliseconds for {}.",off,len, duration / 1_000_000, blobId);
   }
 
   private void openStream() {
+    long start = System.nanoTime();
     List<BlobWriteOption> writeOptions = Lists.newArrayList();
 
     gcpProperties
@@ -117,6 +126,9 @@ class GCSOutputStream extends PositionOutputStream {
     gcpProperties.channelWriteChunkSize().ifPresent(channel::setChunkSize);
 
     stream = Channels.newOutputStream(channel);
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation openStream() took {} milliseconds for {}.", duration / 1_000_000, blobId);
   }
 
   @Override

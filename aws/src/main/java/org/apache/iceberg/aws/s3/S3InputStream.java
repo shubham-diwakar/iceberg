@@ -111,14 +111,19 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
   public void seek(long newPos) {
     Preconditions.checkState(!closed, "already closed");
     Preconditions.checkArgument(newPos >= 0, "position is negative: %s", newPos);
+    long start = System.nanoTime();
 
     // this allows a seek beyond the end of the stream but the next read will fail
     next = newPos;
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation seek({}) took {} milliseconds for {}.",newPos, duration / 1_000_000, this.location);
   }
 
   @Override
   public int read() throws IOException {
     Preconditions.checkState(!closed, "Cannot read: already closed");
+    long start = System.nanoTime();
     positionStream();
     try {
       int bytesRead = Failsafe.with(retryPolicy).get(() -> stream.read());
@@ -126,6 +131,9 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
       next += 1;
       readBytes.increment();
       readOperations.increment();
+      long end = System.nanoTime();
+      long duration = end - start;
+      LOG.info("Operation read() took {} milliseconds for {}.", duration / 1_000_000, this.location);
 
       return bytesRead;
     } catch (FailsafeException ex) {
@@ -140,6 +148,7 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
   @Override
   public int read(byte[] b, int off, int len) throws IOException {
     Preconditions.checkState(!closed, "Cannot read: already closed");
+    long start = System.nanoTime();
     positionStream();
 
     try {
@@ -148,6 +157,9 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
       next += bytesRead;
       readBytes.increment(bytesRead);
       readOperations.increment();
+      long end = System.nanoTime();
+      long duration = end - start;
+      LOG.info("Operation read(_,{},{}) took {} milliseconds for {}.",off,len, duration / 1_000_000, this.location);
 
       return bytesRead;
     } catch (FailsafeException ex) {
@@ -162,19 +174,28 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
   @Override
   public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
     Preconditions.checkPositionIndexes(offset, offset + length, buffer.length);
+    long start = System.nanoTime();
 
     String range = String.format("bytes=%s-%s", position, position + length - 1);
 
     IOUtil.readFully(readRange(range), buffer, offset, length);
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation readFully({},_,{},{}) took {} milliseconds for {} .",position,offset,length, duration / 1_000_000, this.location);
   }
 
   @Override
   public int readTail(byte[] buffer, int offset, int length) throws IOException {
     Preconditions.checkPositionIndexes(offset, offset + length, buffer.length);
+    long start = System.nanoTime();
 
     String range = String.format("bytes=-%s", length);
 
-    return IOUtil.readRemaining(readRange(range), buffer, offset, length);
+    int readByte = IOUtil.readRemaining(readRange(range), buffer, offset, length);
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation readTail(_,{},{}) took {} milliseconds for {}.",offset,length, duration / 1_000_000, this.location);
+    return readByte;
   }
 
   private InputStream readRange(String range) {
@@ -188,12 +209,17 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
 
   @Override
   public void close() throws IOException {
+    long start = System.nanoTime();
     super.close();
     closed = true;
     closeStream(false);
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation Close() took {} milliseconds for {}.", duration / 1_000_000, this.location);
   }
 
   private void positionStream() throws IOException {
+    long start = System.nanoTime();
     if ((stream != null) && (next == pos)) {
       // already at specified position
       return;
@@ -214,6 +240,9 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
         }
       }
     }
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation Position Stream took {} milliseconds for {}.", duration / 1_000_000, this.location);
 
     // close the stream and open at desired position
     LOG.debug("Seek with new stream for {} to offset {}", location, next);
@@ -226,6 +255,7 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
   }
 
   private void openStream(boolean closeQuietly) throws IOException {
+    long start = System.nanoTime();
     GetObjectRequest.Builder requestBuilder =
         GetObjectRequest.builder()
             .bucket(location.bucket())
@@ -241,6 +271,9 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
     } catch (NoSuchKeyException e) {
       throw new NotFoundException(e, "Location does not exist: %s", location);
     }
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation Open stream took {} milliseconds for {}.", duration / 1_000_000, this.location);
   }
 
   @VisibleForTesting
@@ -250,6 +283,7 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
 
   private void closeStream(boolean closeQuietly) throws IOException {
     if (stream != null) {
+      long start = System.nanoTime();
       // if we aren't at the end of the stream, and the stream is abortable, then
       // call abort() so we don't read the remaining data with the Apache HTTP client
       abortStream();
@@ -269,13 +303,20 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
         }
       }
       stream = null;
+      long end = System.nanoTime();
+      long duration = end - start;
+      LOG.info("Operation Close stream took {} milliseconds for {}.", duration / 1_000_000, this.location);
     }
   }
 
   private void abortStream() {
     try {
       if (stream instanceof Abortable && stream.read() != -1) {
+        long start = System.nanoTime();
         ((Abortable) stream).abort();
+        long end = System.nanoTime();
+        long duration = end - start;
+        LOG.info("Operation abortStream took {} milliseconds for {}.", duration / 1_000_000, this.location);
       }
     } catch (Exception e) {
       LOG.warn("An error occurred while aborting the stream", e);
