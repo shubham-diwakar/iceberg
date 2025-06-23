@@ -125,7 +125,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     }
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.info("Operation seek took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation seek({}) took {} milliseconds.",newPos, duration / 1_000_000);
   }
 
   @Override
@@ -156,7 +156,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     readOperations.increment();
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.info("Operation read(_,_,_) took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation read(_,{},{}) took {} milliseconds.",off,len, duration / 1_000_000);
     return bytesRead;
   }
 
@@ -174,7 +174,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
     }
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.info("Operation readFully took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation readFully({},_,{},{}) took {} milliseconds.",position,offset,length,duration / 1_000_000);
   }
 
   @Override
@@ -189,7 +189,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
       int bytesRead = read(readChannel, ByteBuffer.wrap(buffer), offset, length);
       long end = System.nanoTime();
       long duration = end - start;
-      LOG.info("Operation readTail took {} milliseconds.", duration / 1_000_000);
+      LOG.info("Operation readTail(_,{},{}) took {} milliseconds.",offset,length, duration / 1_000_000);
       return bytesRead;
     }
   }

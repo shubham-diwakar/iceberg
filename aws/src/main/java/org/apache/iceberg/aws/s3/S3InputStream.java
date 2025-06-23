@@ -111,9 +111,13 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
   public void seek(long newPos) {
     Preconditions.checkState(!closed, "already closed");
     Preconditions.checkArgument(newPos >= 0, "position is negative: %s", newPos);
+    long start = System.nanoTime();
 
     // this allows a seek beyond the end of the stream but the next read will fail
     next = newPos;
+    long end = System.nanoTime();
+    long duration = end - start;
+    LOG.info("Operation seek({}) took {} milliseconds.",newPos, duration / 1_000_000);
   }
 
   @Override
@@ -154,7 +158,7 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
       readOperations.increment();
       long end = System.nanoTime();
       long duration = end - start;
-      LOG.info("Operation read(_,_,_) took {} milliseconds.", duration / 1_000_000);
+      LOG.info("Operation read(_,{},{}) took {} milliseconds.",off,len, duration / 1_000_000);
 
       return bytesRead;
     } catch (FailsafeException ex) {
@@ -176,7 +180,7 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
     IOUtil.readFully(readRange(range), buffer, offset, length);
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.info("Operation readFully(_,_,_,_) took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation readFully({},_,{},{}) took {} milliseconds.",position,offset,length, duration / 1_000_000);
   }
 
   @Override
@@ -189,7 +193,7 @@ class S3InputStream extends SeekableInputStream implements RangeReadable {
     int readByte = IOUtil.readRemaining(readRange(range), buffer, offset, length);
     long end = System.nanoTime();
     long duration = end - start;
-    LOG.info("Operation readTail(_,_,_) took {} milliseconds.", duration / 1_000_000);
+    LOG.info("Operation readTail(_,{},{}) took {} milliseconds.",offset,length, duration / 1_000_000);
     return readByte;
   }
 
