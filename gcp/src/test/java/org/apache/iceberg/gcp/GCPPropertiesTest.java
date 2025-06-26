@@ -80,10 +80,16 @@ public class GCPPropertiesTest {
   }
 
   @Test
-  public void testAppName() {
+  public void testUserAgentWithAppName() {
     GCPProperties gcpProperties =
         new GCPProperties(ImmutableMap.of(GCPProperties.GCS_APP_NAME, "my-app-name"));
     assertThat(gcpProperties.appName())
         .isEqualTo("my-app-name gcsfileio/" + EnvironmentContext.get());
+  }
+
+  @Test
+  public void testUserAgentWithDefaultAppName() {
+    GCPProperties gcpProperties = new GCPProperties(ImmutableMap.of());
+    assertThat(gcpProperties.appName()).isEqualTo("gcsfileio/" + EnvironmentContext.get());
   }
 }
