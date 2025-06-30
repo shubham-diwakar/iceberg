@@ -23,7 +23,6 @@ import java.util.Date;
 import java.util.Map;
 import java.util.Optional;
 import org.apache.iceberg.CatalogProperties;
-import org.apache.iceberg.EnvironmentContext;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.rest.RESTUtil;
@@ -63,22 +62,11 @@ public class GCPProperties implements Serializable {
    */
   public static final int GCS_DELETE_BATCH_SIZE_DEFAULT = 50;
 
-  /**
-   * To track GCS partner data usage and identify usage trends. In case of this is not set, the
-   * default user agent taken is gcsfileio/`environment-context`
-   */
-  public static final String GCS_APP_NAME = "gcs.app.name";
-
-  // User Agent Suffix set by the GCS client.
-  private static final String GCS_FILE_IO_USER_AGENT_SUFFIX =
-      "gcsfileio/" + EnvironmentContext.get();
-
   private final Map<String, String> allProperties;
 
   private String projectId;
   private String clientLibToken;
   private String serviceHost;
-  private String appName;
 
   private String gcsDecryptionKey;
   private String gcsEncryptionKey;
@@ -105,12 +93,6 @@ public class GCPProperties implements Serializable {
     projectId = properties.get(GCS_PROJECT_ID);
     clientLibToken = properties.get(GCS_CLIENT_LIB_TOKEN);
     serviceHost = properties.get(GCS_SERVICE_HOST);
-    if (properties.containsKey(GCS_APP_NAME)) {
-      appName = properties.get(GCS_APP_NAME) + " " + GCS_FILE_IO_USER_AGENT_SUFFIX;
-    } else {
-      // If appName is not set, use the default user agent suffix
-      appName = GCS_FILE_IO_USER_AGENT_SUFFIX;
-    }
 
     gcsDecryptionKey = properties.get(GCS_DECRYPTION_KEY);
     gcsEncryptionKey = properties.get(GCS_ENCRYPTION_KEY);
@@ -206,9 +188,5 @@ public class GCPProperties implements Serializable {
 
   public Map<String, String> properties() {
     return allProperties;
-  }
-
-  public String appName() {
-    return appName;
   }
 }

@@ -26,6 +26,7 @@ import com.google.cloud.NoCredentials;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
 import java.util.Map;
+import org.apache.iceberg.EnvironmentContext;
 import org.apache.iceberg.gcp.GCPProperties;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.base.Strings;
@@ -33,6 +34,8 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.util.SerializableSupplier;
 
 class PrefixedStorage implements AutoCloseable {
+  // User Agent Prefix set by the GCS client.
+  private static final String GCS_FILE_IO_USER_AGENT = "gcsfileio/" + EnvironmentContext.get();
   private final String storagePrefix;
   private final GCPProperties gcpProperties;
   private SerializableSupplier<Storage> storage;
@@ -55,7 +58,7 @@ class PrefixedStorage implements AutoCloseable {
                 StorageOptions.newBuilder()
                     .setHeaderProvider(
                         FixedHeaderProvider.create(
-                            ImmutableMap.of("User-agent", gcpProperties.appName())));
+                            ImmutableMap.of("User-agent", GCS_FILE_IO_USER_AGENT)));
 
             gcpProperties.projectId().ifPresent(builder::setProjectId);
             gcpProperties.clientLibToken().ifPresent(builder::setClientLibToken);

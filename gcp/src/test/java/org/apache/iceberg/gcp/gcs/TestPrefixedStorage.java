@@ -55,4 +55,16 @@ public class TestPrefixedStorage {
     assertThat(storage.storagePrefix()).isEqualTo("gs://bucket");
     assertThat(storage.gcpProperties().properties()).isEqualTo(properties);
   }
+
+  @Test
+  public void userAgentPrefix() {
+    Map<String, String> properties =
+        ImmutableMap.of(
+            GCPProperties.GCS_PROJECT_ID, "myProject",
+            GCPProperties.GCS_OAUTH2_TOKEN, "token",
+            GCPProperties.GCS_USER_PROJECT, "myUserProject");
+    PrefixedStorage storage = new PrefixedStorage("gs://bucket", properties, null);
+
+    assertThat(storage.storage().getOptions().getUserAgent()).startsWith("gcsfileio/");
+  }
 }

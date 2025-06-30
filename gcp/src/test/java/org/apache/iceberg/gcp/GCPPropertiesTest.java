@@ -25,7 +25,6 @@ import static org.apache.iceberg.gcp.GCPProperties.GCS_OAUTH2_TOKEN;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
-import org.apache.iceberg.EnvironmentContext;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.junit.jupiter.api.Test;
 
@@ -77,19 +76,5 @@ public class GCPPropertiesTest {
         .isPresent()
         .get()
         .isEqualTo("/v1/credentials");
-  }
-
-  @Test
-  public void testUserAgentWithAppName() {
-    GCPProperties gcpProperties =
-        new GCPProperties(ImmutableMap.of(GCPProperties.GCS_APP_NAME, "my-app-name"));
-    assertThat(gcpProperties.appName())
-        .isEqualTo("my-app-name gcsfileio/" + EnvironmentContext.get());
-  }
-
-  @Test
-  public void testUserAgentWithDefaultAppName() {
-    GCPProperties gcpProperties = new GCPProperties(ImmutableMap.of());
-    assertThat(gcpProperties.appName()).isEqualTo("gcsfileio/" + EnvironmentContext.get());
   }
 }
