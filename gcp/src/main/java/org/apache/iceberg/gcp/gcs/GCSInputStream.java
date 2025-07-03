@@ -21,6 +21,7 @@ package org.apache.iceberg.gcp.gcs;
 import com.google.cloud.ReadChannel;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.Storage.BlobSourceOption;
 import java.io.EOFException;
 import java.io.IOException;
@@ -48,6 +49,9 @@ import org.slf4j.LoggerFactory;
 class GCSInputStream extends SeekableInputStream implements RangeReadable {
   private static final Logger LOG = LoggerFactory.getLogger(GCSInputStream.class);
 
+  public static final int PARQUET_MAGIC_STR_LENGTH = 4;
+  public static final int PARQUET_FOOTER_LENGTH_SIZE = 4;
+
   private final StackTraceElement[] createStack;
   private final Storage storage;
   private final BlobId blobId;
@@ -62,6 +66,7 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
 
   private final Counter readBytes;
   private final Counter readOperations;
+  private byte[] footerContent;
 
   GCSInputStream(
       Storage storage,
@@ -79,7 +84,36 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
 
     createStack = Thread.currentThread().getStackTrace();
 
+    if (footerContent == null) {
+      prefetchFooter();
+    }
+
     openStream();
+  }
+
+  private byte[] prefetchFooter() {
+    // Prefetch the footer if the blob size is known
+    Preconditions.checkState(
+    blobSize > PARQUET_FOOTER_LENGTH_SIZE + PARQUET_MAGIC_STR_LENGTH,
+    "Blob size is too small for a valid parquet file");
+
+    long fileMetadataLengthIndex = blobSize - (PARQUET_MAGIC_STR_LENGTH + PARQUET_FOOTER_LENGTH_SIZE);
+
+    int readSize = (int)Math.min(1024 * 1024, blobSize); // 1 MB read size
+    int startPosition = (int)Math.max(0, blobSize - readSize);
+    footerContent = new byte[readSize];
+    readTail(footerContent, startPosition, readSize);
+
+    // footerContent = new byte[PARQUET_FOOTER_LENGTH_SIZE];
+
+    // try (ReadChannel readChannel = openChannel()) {
+    //   readChannel.seek(fileMetadataLengthIndex);
+    //   readChannel.read(ByteBuffer.wrap(footerContent));
+    // } catch (IOException e) {
+    //   throw new UncheckedIOException("Failed to prefetch footer", e);
+    // }
+
+    // return footerContent;
   }
 
   private void openStream() {
@@ -174,6 +208,11 @@ class GCSInputStream extends SeekableInputStream implements RangeReadable {
       throws IOException {
     buffer.position(off);
     buffer.limit(Math.min(off + len, buffer.capacity()));
+    if (footerContent != null && pos + off >= blobSize - footerContent.length) {
+      int startLength = (int)((pos+off) - (blobSize - footerContent.length));
+      buffer.put(footerContent, startLength,len);
+      return len;
+    }
     return readChannel.read(buffer);
   }
 
